@@ -1,0 +1,45 @@
+// Prisma 7 generator: provider is "prisma-client" (not prisma-client-js), output is mandatory.
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  // Prisma 7: connection url lives in prisma.config.ts (for Migrate) and the
+  // adapter is passed to the PrismaClient constructor (for runtime). No url here.
+  provider = "postgresql"
+}
+
+/// Global table. NOT tenant-scoped, no RLS. The tenant registry itself.
+model Tenant {
+  id     Int     @id @default(autoincrement())
+  name   String
+  orders Order[]
+}
+
+/// Tenant-scoped. RLS-protected (ENABLE + FORCE). The primary isolation subject.
+model Order {
+  id        Int         @id @default(autoincrement())
+  tenantId  Int
+  tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  title     String
+  amount    Int         @default(0)
+  isActive  Boolean     @default(true)
+  items     OrderItem[]
+  createdAt DateTime    @default(now())
+
+  @@index([tenantId])
+}
+
+/// Child of Order, tenant-scoped. Proves RLS covers nested writes that the
+/// app-level $extends filter silently misses.
+model OrderItem {
+  id       Int    @id @default(autoincrement())
+  tenantId Int
+  orderId  Int
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sku      String
+  qty      Int    @default(1)
+
+  @@index([tenantId])
+}

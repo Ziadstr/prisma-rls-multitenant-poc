@@ -1,0 +1,42 @@
+{
+  "name": "rls-poc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "test": "vitest run",
+    "nest:serve": "node --import @swc-node/register/esm-register src/nest/main.ts",
+    "nest:e2e": "bash test-nest-http.sh"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma"
+    ]
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.27",
+    "@nestjs/core": "^11.1.27",
+    "@nestjs/platform-express": "^11.1.27",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "@swc-node/register": "^1.11.1",
+    "@swc/core": "^1.15.41",
+    "@types/node": "^26.0.0",
+    "@types/pg": "^8.20.0",
+    "@types/supertest": "^7.2.0",
+    "nestjs-cls": "^6.2.1",
+    "pg": "^8.22.0",
+    "prisma": "^7.8.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "supertest": "^7.2.2",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "unplugin-swc": "^1.5.9",
+    "vitest": "^4.1.9"
+  }
+}

@@ -1,0 +1,45 @@
+# RLS POC infra.
+# Postgres on 55432 to avoid the flexpass pg already on 15432.
+# pgBouncer (transaction mode) on 56432 to prove SET LOCAL survives a real pooler.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: rls-poc-pg
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "55432:5432"
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rls_poc"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: rls-poc-pgbouncer
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Connect pooler to postgres as app_owner; clients still auth as their own role.
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: rls_poc
+      POOL_MODE: transaction
+      # Backend connects as app_owner, the NON-superuser table owner, so FORCE RLS
+      # still binds every query arriving through the pooler. scram matches what
+      # node-postgres negotiates and what Postgres 16 stores for the role.
+      AUTH_TYPE: scram-sha-256
+      DB_USER: app_owner
+      DB_PASSWORD: app_owner_dev_pw
+      MAX_CLIENT_CONN: "200"
+      DEFAULT_POOL_SIZE: "5"
+      # tiny pool on purpose: forces connection reuse so any SET-LOCAL leak shows fast
+      ADMIN_USERS: app_owner
+    ports:
+      - "56432:5432"
