@@ -1,6 +1,6 @@
 # Prisma RLS Multi-Tenant POC (PostgreSQL + NestJS)
 
-A rigorously tested reference for **PostgreSQL Row-Level Security as a tenant-isolation backstop**, on the latest stable **Prisma 7 + NestJS 11**. Two layers, a *surgical* binding that runs near the no-RLS performance ceiling, DB-enforced isolation where it matters, and a type-safe API so misuse is a compile error. 39 tests including negative controls, benchmarks, and a real HTTP load test.
+A rigorously tested reference for **PostgreSQL Row-Level Security as a tenant-isolation backstop**, on the latest stable **Prisma 7 + NestJS 11**. Two layers, a *surgical* binding that runs near the no-RLS performance ceiling, DB-enforced isolation where it matters, and a type-safe API so misuse is a compile error. 42 tests including negative controls, benchmarks, and a real HTTP load test.
 
 Audience: backend engineers deciding how to enforce tenant isolation in a shared-database multi-tenant SaaS. Date: 2026-06-22.
 
@@ -16,7 +16,7 @@ Postgres: FORCE RLS on sensitive tables, app-layer WHERE on the rest, coverage g
 
 **Two layers:**
 
-1. **Layer 1 (every table, automatic, zero transaction): app-layer WHERE-injection.** A Prisma `$extends` client injects `tenantId` into reads, stamps it on creates, and post-filters `findUnique`. Batch-safe for free because the tenant lives in the query, not the connection.
+1. **Layer 1 (every table, automatic, zero transaction): app-layer WHERE-injection.** A Prisma `$extends` client injects `tenantId` into reads, stamps it on creates, post-filters `findUnique`, and ownership-checks by-id writes (`update`/`delete`/`upsert`) so even a non-RLS table can't be written cross-tenant. Batch-safe for free because the tenant lives in the query, not the connection.
 2. **Layer 2 (sensitive tables only, DB-enforced): PostgreSQL RLS with FORCE.** Bound **surgically**: only routes marked `@TenantTransaction()` open a transaction and set the tenant GUC, so RLS enforces isolation and writes are atomic. The 70%+ of traffic that never touches a sensitive table pays nothing.
 
 The headline result: **surgical binding runs at ~96% of the no-RLS ceiling**, while wrapping every request in a transaction (the obvious approach) taxes all traffic for no reason. See the bake-off below.
@@ -47,7 +47,7 @@ pnpm prisma generate
 # 2. migrations: init (generated DDL) + add_rls (hand-written policies) + add_customer
 pnpm prisma migrate dev
 
-# 3. correctness + benchmarks (39 tests)
+# 3. correctness + benchmarks (42 tests)
 pnpm test
 
 # 4. NestJS HTTP e2e (both paths: app-layer + @TenantTransaction)
@@ -83,6 +83,7 @@ Both scale to 10x the pool size with **zero errors and zero timeouts**; throughp
 - **FORCE footgun:** with `ENABLE` but not `FORCE`, the table owner reads every tenant's rows, no error (`db/init` + raw proof).
 - **Dataloader leak:** connection-bound binding under 400 same-tick cross-tenant `findUnique`s = 204/400 wrong, 107 real leaks (`test/dataloader-naive.test.ts`); the transaction binding = 0/400 (`test/dataloader.test.ts`).
 - **Lost updates:** the per-query extension can't do atomic read-modify-write, 30 concurrent increments land on 1 (`test/locking.test.ts`); `SELECT FOR UPDATE` inside a transaction lands on 30.
+- **Cross-tenant write hole:** on a non-RLS table, `update`/`delete`/`upsert` by id can't carry tenantId in `where`, so without a guard tenant A clobbers tenant B's row. `test/layer1-write-hole.test.ts` proves the hole, then proves the ownership pre-check (Layer 1) blocks it.
 
 ## Non-negotiable gotchas (each is a proven footgun)
 
@@ -141,9 +142,9 @@ app/
       order.controller.ts               sensitive route (prisma.tx)
       customer.controller.ts            non-sensitive route (prisma.app)
       main.ts                           HTTP server for the e2e/load test
-  test/                     15 suites: rls, advanced, pgbouncer, perf, dataloader (+ negative
+  test/                     16 suites: rls, advanced, pgbouncer, perf, dataloader (+ negative
                             control), locking, per-request, bench, bench-latency, uuid,
-                            rls-coverage, combined, bakeoff
+                            rls-coverage, combined, bakeoff, layer1-write-hole
   test-nest-http.sh         NestJS HTTP e2e (swc-node + curl)
   load-test.sh              autocannon HTTP load test
 ```
