@@ -2,3 +2,5 @@ node_modules/
 src/generated/
 dist/
 *.log
+.claude/
+.env*
