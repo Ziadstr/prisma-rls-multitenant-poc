@@ -3,6 +3,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core'
 import { ClsModule } from 'nestjs-cls'
 import { PrismaService } from './prisma.service.js'
 import { OrderController } from './order.controller.js'
+import { CustomerController } from './customer.controller.js'
 import { TenantTxInterceptor } from './tenant-tx.interceptor.js'
 
 @Module({
@@ -21,7 +22,7 @@ import { TenantTxInterceptor } from './tenant-tx.interceptor.js'
       },
     }),
   ],
-  controllers: [OrderController],
+  controllers: [OrderController, CustomerController],
   providers: [PrismaService, { provide: APP_INTERCEPTOR, useClass: TenantTxInterceptor }],
 })
 export class AppModule {}

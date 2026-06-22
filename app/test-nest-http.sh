@@ -8,7 +8,7 @@ source ../set-env.sh
 
 echo "== seed =="
 docker exec rls-poc-pg psql -U postgres -d rls_poc -tAc \
-  "TRUNCATE \"OrderItem\",\"Order\",\"Tenant\" RESTART IDENTITY CASCADE; INSERT INTO \"Tenant\"(name) VALUES ('Acme'),('Globex'); INSERT INTO \"Order\"(\"tenantId\",title) VALUES (1,'a1'),(1,'a2'),(2,'g1');" >/dev/null
+  "TRUNCATE \"OrderItem\",\"Order\",\"Customer\",\"Tenant\" RESTART IDENTITY CASCADE; INSERT INTO \"Tenant\"(name) VALUES ('Acme'),('Globex'); INSERT INTO \"Order\"(\"tenantId\",title) VALUES (1,'a1'),(1,'a2'),(2,'g1'); INSERT INTO \"Customer\"(\"tenantId\",name) VALUES (1,'c1'),(1,'c2'),(2,'cg1');" >/dev/null
 
 node --import @swc-node/register/esm-register src/nest/main.ts > nest.log 2>&1 &
 SERVER=$!
@@ -20,6 +20,9 @@ if echo "$t1" | grep -q '"tenantId":2' || [ "$(echo "$t1" | grep -o '"id"' | wc 
 
 t2=$(curl -s -H "x-tenant-id: 2" http://localhost:4099/orders)
 if echo "$t2" | grep -q '"tenantId":1' || [ "$(echo "$t2" | grep -o '"id"' | wc -l)" -ne 1 ]; then echo "FAIL t2 isolation: $t2"; fail=1; else echo "PASS t2 sees only its 1 order"; fi
+
+cust=$(curl -s -H "x-tenant-id: 1" http://localhost:4099/customers)
+if echo "$cust" | grep -q '"tenantId":2' || [ "$(echo "$cust" | grep -o '"id"' | wc -l)" -ne 2 ]; then echo "FAIL customer app-layer isolation: $cust"; fail=1; else echo "PASS customer (app-layer, no tx route) sees only its 2"; fi
 
 code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4099/orders)
 [ "$code" -ge 400 ] && echo "PASS no-context fails closed ($code)" || { echo "FAIL no-context should 5xx, got $code"; fail=1; }

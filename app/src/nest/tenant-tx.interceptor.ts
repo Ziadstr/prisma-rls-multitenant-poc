@@ -5,28 +5,36 @@ import {
   CallHandler,
   ForbiddenException,
 } from '@nestjs/common'
+import { Reflector } from '@nestjs/core'
 import { ClsService } from 'nestjs-cls'
 import { Observable, from, lastValueFrom } from 'rxjs'
 import { PrismaService } from './prisma.service.js'
+import { TENANT_TX } from './tenant-transaction.decorator.js'
 
 /**
- * Per-request binding. Opens ONE transaction per request, sets the tenant GUC once, stashes the
- * transaction client in CLS, then runs the whole handler inside it. Fail-closed: no tenant -> 403.
- *
- * This is the recommended binding (vs per-query): baseline throughput, and atomic RMW / dataloader
- * / scoped raw SQL all work for free. The handler must not do slow non-DB I/O while the
- * transaction is open, and the pool must be sized to peak concurrency.
+ * Surgical binding. Requires a tenant on every route (fail-closed: no tenant -> 403). Only routes
+ * marked @TenantTransaction() open a transaction (GUC set, stashed as prisma.tx). Everything else
+ * runs with no transaction and uses the app-layer client. This is the bake-off winner: the
+ * majority of (non-sensitive) traffic skips the transaction entirely.
  */
 @Injectable()
 export class TenantTxInterceptor implements NestInterceptor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cls: ClsService,
+    private readonly reflector: Reflector,
   ) {}
 
-  intercept(_ctx: ExecutionContext, next: CallHandler): Observable<unknown> {
+  intercept(ctx: ExecutionContext, next: CallHandler): Observable<unknown> {
     const tenantId = this.cls.get<number>('tenantId')
     if (tenantId == null) throw new ForbiddenException('no tenant context')
+
+    const needsTx = this.reflector.getAllAndOverride<boolean>(TENANT_TX, [
+      ctx.getHandler(),
+      ctx.getClass(),
+    ])
+    if (!needsTx) return next.handle() // app-layer only, no transaction
+
     return from(
       this.prisma.$transaction(
         async (tx) => {

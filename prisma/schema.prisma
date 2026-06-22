@@ -5,30 +5,15 @@ generator client {
 }
 
 datasource db {
-  // Prisma 7: connection url lives in prisma.config.ts (for Migrate) and the
-  // adapter is passed to the PrismaClient constructor (for runtime). No url here.
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 /// Global table. NOT tenant-scoped, no RLS. The tenant registry itself.
 model Tenant {
-  id        Int        @id @default(autoincrement())
-  name      String
-  orders    Order[]
-  customers Customer[]
-}
-
-/// Non-sensitive tenant-scoped table. NO RLS by design: isolated by the app-layer
-/// WHERE-injection only. Represents the bulk of tenant data where a DB-level backstop
-/// is not worth the per-request transaction cost. Used to model realistic mixed traffic.
-model Customer {
-  id        Int      @id @default(autoincrement())
-  tenantId  Int
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  name      String
-  createdAt DateTime @default(now())
-
-  @@index([tenantId])
+  id     Int     @id @default(autoincrement())
+  name   String
+  orders Order[]
 }
 
 /// Tenant-scoped. RLS-protected (ENABLE + FORCE). The primary isolation subject.

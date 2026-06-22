@@ -29,7 +29,12 @@ describe('RLS coverage guard', () => {
         )
     `)
 
-    const unprotected = rows.filter((r) => !(r.enabled && r.forced && r.policies > 0))
+    // Tables intentionally isolated by the app-layer WHERE-injection only (no RLS by design).
+    // Anything NOT on this list that carries tenantId must be FORCE-RLS protected.
+    const APP_LAYER_ONLY = new Set(['Customer'])
+    const unprotected = rows.filter(
+      (r) => !APP_LAYER_ONLY.has(r.relname) && !(r.enabled && r.forced && r.policies > 0),
+    )
     if (unprotected.length) console.log('[coverage] UNPROTECTED tenant tables:', unprotected)
     expect(rows.length).toBeGreaterThan(0) // sanity: we actually found tenant tables
     expect(unprotected).toHaveLength(0)

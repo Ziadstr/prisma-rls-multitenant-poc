@@ -38,5 +38,8 @@
     "typescript": "^6.0.3",
     "unplugin-swc": "^1.5.9",
     "vitest": "^4.1.9"
+  },
+  "devDependencies": {
+    "autocannon": "^8.0.0"
   }
 }
